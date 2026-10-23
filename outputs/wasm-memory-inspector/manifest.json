@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Webengine Hacks",
+  "version": "1.2.0",
+  "description": "Inspetor simples de memória WebAssembly para páginas sob seu controle.",
+  "permissions": ["activeTab", "tabs", "storage", "webNavigation"],
+  "action": {
+    "default_title": "Webengine Hacks"
+  },
+  "background": {"service_worker":"background.js"},
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["page-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    }
+  ]
+}
