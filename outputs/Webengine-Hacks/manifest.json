@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Webengine Hacks",
-  "version": "1.2.0",
+  "version": "1.3.1",
   "description": "Inspetor simples de memória WebAssembly para páginas sob seu controle.",
   "permissions": ["activeTab", "tabs", "storage", "webNavigation"],
   "action": {
-    "default_title": "Webengine Hacks"
+    "default_title": "Webengine Hacks",
+    "default_popup": "popup.html"
   },
-  "background": {"service_worker":"background.js"},
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],

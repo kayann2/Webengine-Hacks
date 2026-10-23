@@ -30,25 +30,20 @@
           <div>
             <label for="type">Tipo</label>
             <select id="type">
-              <option value="int32">Int32</option>
-              <option value="uint32">Uint32</option>
-              <option value="float32">Float32</option>
-              <option value="float64">Float64</option>
-              <option value="int16">Int16</option>
-              <option value="uint16">Uint16</option>
-              <option value="int8">Int8</option>
-              <option value="uint8">Uint8</option>
+              <option value="all">All / Todos</option>
+              <option value="integer">Integers / Inteiros</option>
+              <option value="float">Float</option>
             </select>
           </div>
           <div>
             <label for="value">Valor</label>
-            <input id="value" type="number" step="any" placeholder="Ex.: 100">
+            <input id="value" type="text" inputmode="decimal" placeholder="Ex.: 100">
           </div>
         </div>
 
         <div class="actions">
-          <button id="scan" class="primary" disabled>Nova busca</button>
-          <button id="next" disabled>Filtrar</button>
+          <button id="scan" class="primary" disabled>First Scan</button>
+          <button id="next" disabled>Next Scan</button>
           <button id="reset" class="ghost" disabled>Limpar</button>
         </div>
       </section>

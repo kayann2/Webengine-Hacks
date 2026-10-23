@@ -16,6 +16,7 @@ const elements = {
 };
 
 let activeTabId;
+let activeFrameId = 0;
 let hasResults = false;
 
 function setMessage(text, kind = "") {
@@ -36,14 +37,14 @@ async function call(action, payload = {}) {
     target: "wasm-memory-inspector",
     action,
     payload
-  });
+  }, { frameId: activeFrameId });
   if (!response?.ok) throw new Error(response?.error || "Não foi possível comunicar com a página.");
   return response.data;
 }
 
 async function callAllFrames(action, payload = {}) {
   if (!activeTabId) throw new Error("Aba ativa não encontrada.");
-  const frames = await chrome.webNavigation.getAllFrames({ tabId: activeTabId });
+  const frames = await chrome.webNavigation.getAllFrames({ tabId: activeTabId }) || [];
   const settled = await Promise.allSettled(frames.map(async ({ frameId }) => {
     const response = await chrome.tabs.sendMessage(activeTabId, {
       target: "wasm-memory-inspector",
@@ -84,7 +85,7 @@ function renderResults(items, truncated = false) {
       address.title = `Memória ${item.memoryId} · ${item.type}`;
 
       const input = document.createElement("input");
-      input.type = "number";
+      input.type = "text"; input.inputMode = "decimal";
       input.step = "any";
       input.value = String(item.value);
       input.setAttribute("aria-label", `Valor no endereço ${address.textContent}`);
@@ -146,15 +147,10 @@ elements.scan.addEventListener("click", () => perform("scan"));
 elements.next.addEventListener("click", () => perform("nextScan"));
 elements.overlay.addEventListener("click", async () => {
   try {
-    const responses = await callAllFrames("toggleOverlay");
-    const detected = responses.reduce((sum, item) => sum + (item.data.memories || 0), 0);
-    if (!detected) {
-      setMessage("Nenhuma memória detectada em nenhum quadro. O jogo pode estar usando Web Worker.", "error");
-      return;
-    }
+    await call("toggleOverlay");
     window.close();
   } catch (error) {
-    setMessage("Não foi possível abrir o painel. Recarregue a página.", "error");
+    setMessage("Panel failed: " + error.message + " — reload the game page.", "error");
   }
 });
 elements.value.addEventListener("keydown", (event) => {
@@ -194,7 +190,11 @@ elements.refresh.addEventListener("click", async () => {
       throw new Error("Abra uma página HTTP ou HTTPS para usar o inspetor.");
     }
     activeTabId = tab.id;
-    const status = await call("status");
+    const statuses = await callAllFrames("status");
+    const selected = statuses.find(item => item.data.memories?.length) || statuses.find(item => item.frameId === 0) || statuses[0];
+    if (!selected) throw new Error("Reload the game page after updating the extension. No connected frame was found.");
+    activeFrameId = selected.frameId;
+    const status = selected.data;
     elements.statusDot.className = "status-dot ok";
 
     if (!status.memories.length) {

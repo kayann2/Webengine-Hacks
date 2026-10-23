@@ -1,0 +1,14 @@
+Webengine Hacks 1.3.1 — SINGLE EXTENSION
+
+Chrome / Edge:
+1. Remove the old WASM Memory Inspector / Webengine Hacks entries from
+   chrome://extensions or edge://extensions.
+2. Enable Developer mode.
+3. Click Load unpacked and select the Webengine-Hacks folder beside this file.
+4. Reload the game page.
+5. Click the extension icon. The popup opens even when the game is unavailable.
+6. Use Open floating panel to move the interface inside the game.
+
+The popup and floating panel are two views of ONE extension.
+Old packages are preserved under work/backups; do not install those.
+Native browser popups cannot be dragged. The in-page panel can.

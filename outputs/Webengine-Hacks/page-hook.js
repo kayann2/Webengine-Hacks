@@ -99,7 +99,9 @@
   }
 
   function parseValue(raw, type) {
-    const value = Number(raw);
+    const text = String(raw).trim().replace(",", ".");
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) throw new Error("Enter a decimal number (dot or comma).");
+    const value = Number(text);
     if (!Number.isFinite(value)) throw new Error("Informe um valor numérico válido.");
     if (!type.startsWith("float") && !Number.isInteger(value)) {
       throw new Error("O tipo selecionado exige um número inteiro.");
@@ -107,10 +109,21 @@
     return value;
   }
 
-  function valuesMatch(actual, expected, type) {
-    if (!type.startsWith("float")) return actual === expected;
-    const tolerance = Math.max(1e-6, Math.abs(expected) * 1e-6);
-    return Math.abs(actual - expected) <= tolerance;
+  function matcher(raw, type) {
+    const expected = parseValue(raw, "float64");
+    if (!type.startsWith("float")) return actual => Number.isInteger(expected) && actual === expected;
+    const text = String(raw).trim().replace(",", ".");
+    const decimals = (text.split(".")[1] || "").length;
+    const step = 10 ** -decimals;
+    const magnitude = Math.abs(expected);
+    const negative = text.startsWith("-");
+    const convert = type === "float32" ? Math.fround : value => value;
+    const lower = convert(magnitude);
+    const upper = convert(magnitude + step);
+    if (lower === upper) return actual => actual === convert(expected);
+    return actual => Number.isFinite(actual) &&
+      (negative ? actual <= 0 : actual >= 0) &&
+      Math.abs(actual) >= lower && Math.abs(actual) < upper;
   }
 
   function read(record, address, type) {
@@ -134,41 +147,44 @@
 
   function initialScan(memoryId, type, rawValue) {
     const record = memories.get(Number(memoryId));
-    if (!record) throw new Error("Memória não encontrada. Recarregue a página.");
-    const info = typeInfo[type];
-    if (!info) throw new Error("Tipo de dado inválido.");
-    const expected = parseValue(rawValue, type);
+    if (!record) throw new Error("Memory not found. Reload the game.");
+    const types = type === "all" ? Object.keys(typeInfo)
+      : type === "integer" ? Object.keys(typeInfo).filter(key => !key.startsWith("float"))
+      : type === "float" ? ["float32", "float64"]
+      : [type];
+    if (types.some(key => !typeInfo[key])) throw new Error("Invalid numeric type.");
+    const checks = types.map(key => ({type:key, ...typeInfo[key], matches:matcher(rawValue,key)}));
     const view = new DataView(record.memory.buffer);
-    const matches = [];
+    const results = [];
     const MAX_RESULTS = 5000;
-
-    for (let address = 0; address + info.size <= view.byteLength; address += info.size) {
-      const actual = view[info.getter](address, true);
-      if (valuesMatch(actual, expected, type)) {
-        matches.push({ memoryId: record.id, address, type, value: actual });
-        if (matches.length >= MAX_RESULTS) break;
+    // Walk addresses first so All Types does not fill the limit with only one type.
+    outer: for (let address = 0; address < view.byteLength; address++) {
+      for (const check of checks) {
+        if (address % check.size || address + check.size > view.byteLength) continue;
+        const value = view[check.getter](address,true);
+        if (check.matches(value)) {
+          results.push({memoryId:record.id,address,type:check.type,value});
+          if (results.length >= MAX_RESULTS) break outer;
+        }
       }
     }
-    scanResults = matches;
-    return { results: matches, truncated: matches.length >= MAX_RESULTS };
+    scanResults = results;
+    return {results, truncated:results.length >= MAX_RESULTS};
   }
 
   function nextScan(rawValue) {
-    if (!scanResults.length) throw new Error("Faça uma busca inicial primeiro.");
-    const expectedByType = new Map();
-    scanResults = scanResults.filter((item) => {
+    if (!scanResults.length) throw new Error("Run First Scan first.");
+    const checks = new Map();
+    for (const item of scanResults) {
+      if (!checks.has(item.type)) checks.set(item.type,matcher(rawValue,item.type));
+    }
+    scanResults = scanResults.filter(item => {
       try {
-        if (!expectedByType.has(item.type)) {
-          expectedByType.set(item.type, parseValue(rawValue, item.type));
-        }
-        const record = memories.get(item.memoryId);
-        item.value = read(record, item.address, item.type);
-        return valuesMatch(item.value, expectedByType.get(item.type), item.type);
-      } catch (_) {
-        return false;
-      }
+        item.value = read(memories.get(item.memoryId),item.address,item.type);
+        return checks.get(item.type)(item.value);
+      } catch (_) { return false; }
     });
-    return { results: scanResults, truncated: false };
+    return {results:scanResults,truncated:false};
   }
 
   function refreshResults() {

@@ -11,7 +11,7 @@ global.window = {
   }
 };
 
-vm.runInThisContext(fs.readFileSync("outputs/wasm-memory-inspector/page-hook.js", "utf8"));
+vm.runInThisContext(fs.readFileSync("outputs/Webengine-Hacks/page-hook.js", "utf8"));
 
 function request(action, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -51,7 +51,56 @@ function request(action, payload = {}) {
     throw new Error("Write failed");
   }
 
-  console.log("Smoke test passed: capture, scan and write are working.");
+  const assert = require("assert/strict");
+  const view = new DataView(instance.exports.memory.buffer);
+  for (const [type,setter,address] of [["float32","setFloat32",256],["float64","setFloat64",512]]) {
+    view[setter](address,124.5345314123,true);
+    let result = await request("scan",{memoryId:1,type,value:"124,5"});
+    assert(result.results.some(x=>x.address===address));
+    view[setter](address,112.3456,true);
+    await assert.rejects(request("nextScan",{value:"invalid"}));
+    result = await request("nextScan",{value:"112.3"});
+    assert(result.results.some(x=>x.address===address),type+" must keep original address");
+    view[setter](address,124.5345,true);
+    result = await request("scan",{memoryId:1,type,value:"124.50"});
+    assert(!result.results.some(x=>x.address===address));
+    view[setter](address,124.509,true);
+    result = await request("scan",{memoryId:1,type,value:"124.50"});
+    assert(result.results.some(x=>x.address===address));
+    view[setter](address,124.51,true);
+    result = await request("scan",{memoryId:1,type,value:"124.50"});
+    assert(!result.results.some(x=>x.address===address),"Upper boundary excluded");
+    view[setter](address,-124.5345,true);
+    result = await request("scan",{memoryId:1,type,value:"-124,5"});
+    assert(result.results.some(x=>x.address===address));
+    view[setter](address,112.3,true);
+    result = await request("scan",{memoryId:1,type,value:"112.3"});
+    assert(result.results.some(x=>x.address===address),"Float32 representation boundary");
+  }
+  view.setInt32(1024,124,true); view.setFloat32(2048,124.5345,true);
+  let result = await request("scan",{memoryId:1,type:"all",value:"124"});
+  assert(result.results.some(x=>x.address===1024 && x.type==="int32"));
+  assert(result.results.some(x=>x.address===2048 && x.type==="float32"));
+  view.setFloat32(2048,112.345,true);
+  result=await request("nextScan",{value:"112,3"});
+  assert(result.results.some(x=>x.address===2048 && x.type==="float32"));
+  assert(!result.results.some(x=>x.type==="int32"));
+  view.setFloat32(2048,124.5345,true);
+  view.setFloat64(4096,124.5789,true);
+  result = await request("scan",{memoryId:1,type:"float",value:"124,5"});
+  assert(result.results.some(x=>x.address===2048 && x.type==="float32"));
+  assert(result.results.some(x=>x.address===4096 && x.type==="float64"));
+  assert(result.results.every(x=>x.type.startsWith("float")));
+  view.setFloat32(2048,112.345,true);
+  view.setFloat64(4096,112.378,true);
+  result = await request("nextScan",{value:"112.3"});
+  assert(result.results.some(x=>x.address===2048));
+  assert(result.results.some(x=>x.address===4096));
+  result = await request("scan",{memoryId:1,type:"integer",value:"124"});
+  assert(result.results.some(x=>x.address===1024 && x.type==="int32"));
+  assert(result.results.every(x=>!x.type.startsWith("float")));
+  console.log("Passed: prefix scans, grouped Integer/Float searches and Next Scan tracking.");
+
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

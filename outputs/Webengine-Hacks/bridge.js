@@ -33,7 +33,7 @@
     overlayHost = document.createElement("div");
     overlayHost.id = "wasm-memory-inspector-overlay-host";
     overlayHost.style.cssText = "position:fixed;z-index:2147483647;top:16px;right:16px;width:330px;pointer-events:auto;";
-    document.documentElement.append(overlayHost);
+    (document.fullscreenElement || document.documentElement).append(overlayHost);
     const frame = document.createElement("iframe");
     frame.title = "Webengine Hacks";
     frame.style.cssText = "width:100%;height:560px;border:0;display:block;border-radius:13px";
@@ -82,7 +82,7 @@
         <div class="body">
           <p class="message">Looking for Unity/WASM memory…</p>
           <label>Memória</label><select class="memory" disabled><option>Nenhuma memória</option></select>
-          <div class="fields"><div><label>Tipo</label><select class="type"><option value="int32">Int32</option><option value="uint32">Uint32</option><option value="float32">Float32</option><option value="float64">Float64</option><option value="int16">Int16</option><option value="uint16">Uint16</option><option value="int8">Int8</option><option value="uint8">Uint8</option></select></div><div><label>Valor</label><input class="value" type="number" step="any" placeholder="Ex.: 100"></div></div>
+          <div class="fields"><div><label>Tipo</label><select class="type"><option value="all">All / Todos</option><option value="integer">Integers / Inteiros</option><option value="float">Float</option></select></div><div><label>Valor</label><input class="value" type="text" inputmode="decimal" placeholder="Ex.: 100"></div></div>
           <div class="actions"><button class="scan primary" disabled>Nova busca</button><button class="next" disabled>Filtrar</button><button class="clear" disabled>Limpar</button></div>
           <div class="summary"><span>Resultados</span><span class="count">0</span></div>
           <div class="results"><div class="empty">Matching addresses appear here.</div></div>
@@ -122,7 +122,7 @@
     const localize = () => {
       const index = lang.value === "pt" ? 1 : 0;
       Object.entries(labels).forEach(([selector, texts]) => { q(selector).textContent = texts[index]; });
-      root.querySelectorAll("label").forEach((el,i) => { el.textContent = (index ? ["Memória","Tipo","Valor"] : ["Memory","Type","Value"])[i]; });
+      root.querySelectorAll(".fields label, .body > label:not(:has(input))").forEach((el,i) => { el.textContent = (index ? ["Memória","Tipo","Valor"] : ["Memory","Type","Value"])[i]; });
     };
     lang.onchange = () => { localize(); chrome.storage.local.set({language:lang.value}); };
     chrome.storage.local.get("language").then(saved => { lang.value=saved.language === "pt"?"pt":"en"; localize(); });
@@ -139,8 +139,8 @@
       } else {
         for (const item of items) {
           const row = document.createElement("div"); row.className = "result";
-          const addr = document.createElement("span"); addr.className = "addr"; addr.textContent = `0x${item.address.toString(16).toUpperCase().padStart(8,"0")}`;
-          const input = document.createElement("input"); input.type = "number"; input.step = "any"; input.value = String(item.value); input.oninput=()=>{input.dataset.dirty="1";};
+          const addr = document.createElement("span"); addr.className = "addr"; addr.title=item.type; addr.textContent = `0x${item.address.toString(16).toUpperCase().padStart(8,"0")} · ${item.type}`;
+          const input = document.createElement("input"); input.type = "text"; input.inputMode = "decimal"; input.step = "any"; input.value = String(item.value); input.oninput=()=>{input.dataset.dirty="1";};
           const write = document.createElement("button"); write.textContent = "↵"; write.title = "Gravar";
           write.onclick = async () => { write.disabled = true; try { const r = await callPage("write", { memoryId:item.memoryId,address:item.address,type:item.type,value:input.value }); input.value = String(r.value); delete input.dataset.dirty; message(`Gravado em ${addr.textContent}.`); } catch (e) { message(e.message,true); } finally { write.disabled = false; } };
           row.append(addr,input,write); ui.results.append(row);
@@ -182,12 +182,21 @@
   }
 
   function mountOverlay() {
-    const host = makeOverlay();
-    const parent = document.fullscreenElement || document.documentElement;
-    if (host.parentNode !== parent) parent.append(host);
+    try { makeOverlay(); }
+    catch (error) {
+      overlayHost?.remove();
+      overlayHost = null;
+      throw error;
+    }
   }
 
-  document.addEventListener("fullscreenchange", () => { if (overlayHost) mountOverlay(); });
+  document.addEventListener("fullscreenchange", () => {
+    if (!overlayHost) return;
+    // Reparenting an iframe destroys its document and event handlers.
+    overlayHost.remove();
+    overlayHost = null;
+    mountOverlay();
+  });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.target !== "wasm-memory-inspector") return;
