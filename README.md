@@ -1,5 +1,5 @@
 # Webengine Hacks
-
+<img width="1280" height="720" alt="Image" src="https://github.com/user-attachments/assets/718d6a6d-da44-4ce4-ba35-24b75738b3b8" />
 A Chrome / Edge extension for inspecting WebAssembly memory with a draggable in-page panel.
 
 **Status: testing / experimental.** This program is still in the testing phase.
